@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Orçamento · Conectar IA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Tokens do design system do app Orçamento (app/lib/core/tokens.dart) */
+  :root {
+    --fundo: #F2F3F8; --superficie: #FFFFFF; --tinta: #1B1F3B; --texto2: #555B7A;
+    --anil: #2B3190; --goiaba: #C23A57; --borda: #D9DBE7;
+    --r-campo: 12px; --r-folha: 20px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --fundo: #12142A; --superficie: #1C1F3A; --tinta: #EEF0FA; --texto2: #A9AECB; --anil: #9EA4F0; --goiaba: #F07A93; --borda: #33375C; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--fundo); color: var(--tinta);
+         font: 400 15px/1.5 "Instrument Sans", system-ui, sans-serif; display: grid; place-items: center; padding: 16px; }
+  main { width: 100%; max-width: 400px; background: var(--superficie); border-radius: var(--r-folha); padding: 28px 24px; }
+  h1 { font: 700 26px/1.15 "Bricolage Grotesque", system-ui, sans-serif; margin: 0 0 6px; }
+  p { margin: 0 0 16px; color: var(--texto2); }
+  label { display: block; font-weight: 600; margin: 12px 0 6px; }
+  input { width: 100%; padding: 12px 14px; border: 1px solid var(--borda); border-radius: var(--r-campo);
+          background: var(--fundo); color: var(--tinta); font: inherit; }
+  input:focus { outline: 2px solid var(--anil); outline-offset: 1px; }
+  button { width: 100%; margin-top: 18px; padding: 13px; border: 0; border-radius: var(--r-campo);
+           background: var(--anil); color: #fff; font: 600 15px "Instrument Sans", system-ui, sans-serif; cursor: pointer; }
+  @media (prefers-color-scheme: dark) { button { color: #12142A; } }
+  button.secundario { background: transparent; color: var(--texto2); margin-top: 8px; }
+  button:disabled { opacity: .55; cursor: wait; }
+  .erro { color: var(--goiaba); margin-top: 12px; min-height: 1.5em; }
+  ul { padding-left: 18px; margin: 0 0 8px; color: var(--texto2); }
+  .cliente { font-weight: 600; color: var(--tinta); }
+  .marca { font: 700 14px "Bricolage Grotesque", system-ui, sans-serif; color: var(--anil); letter-spacing: .02em; margin-bottom: 18px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="marca">Orçamento</div>
+
+  <section id="carregando"><p>Carregando…</p></section>
+
+  <form id="login" hidden>
+    <h1>Entrar para conectar</h1>
+    <p>Use o mesmo e-mail e senha do app Orçamento.</p>
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="email" required>
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" autocomplete="current-password" required>
+    <button id="entrar" type="submit">Entrar</button>
+  </form>
+
+  <section id="consentir" hidden>
+    <h1>Autorizar acesso?</h1>
+    <p><span class="cliente" id="cliente">Um aplicativo</span> quer acessar o orçamento da família como <span class="cliente" id="quem"></span>.</p>
+    <p>Ele vai poder:</p>
+    <ul>
+      <li>ver resumos, lançamentos, contas a pagar, metas e carteira (o que você já vê no app);</li>
+      <li>lançar despesas, receitas e aportes, editar e marcar como pago.</li>
+    </ul>
+    <p>Ele não exclui nada. Você pode desconectar quando quiser, no app (Conectar IA) ou na própria IA.</p>
+    <button id="autorizar" type="button">Autorizar</button>
+    <button id="negar" type="button" class="secundario">Não autorizar</button>
+  </section>
+
+  <section id="fim" hidden><h1 id="fim-titulo">Pronto</h1><p id="fim-texto">Pode voltar para a IA.</p></section>
+
+  <div class="erro" id="erro" role="alert"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script>
+  // Chave publicável: é pública por desenho (mesma do app). Nenhum segredo nesta página.
+  const SUPABASE_URL = "https://emzeknlekovbpytfleiy.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_cL801VCJpr3YsjhNKTZK1g_hZOqnXHr";
+  let sb;
+  try {
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+  } catch (e) { /* tratado em iniciar() */ }
+
+  const $ = (id) => document.getElementById(id);
+  const authId = new URLSearchParams(location.search).get("authorization_id");
+  const show = (id) => ["carregando", "login", "consentir", "fim"].forEach((s) => ($(s).hidden = s !== id));
+  const erro = (t) => ($("erro").textContent = t || "");
+  const fim = (titulo, texto) => { $("fim-titulo").textContent = titulo; $("fim-texto").textContent = texto; show("fim"); };
+
+  async function detalhes() {
+    const { data, error } = await sb.auth.oauth.getAuthorizationDetails(authId);
+    if (error || !data) { fim("Pedido inválido", "Este pedido de conexão expirou ou não é válido. Comece de novo pela IA."); return; }
+    if (!("authorization_id" in data)) { await sairEIr(data.redirect_url); return; } // já autorizado antes
+    $("cliente").textContent = data.client?.name || "Um aplicativo";
+    $("quem").textContent = data.user?.email || "";
+    show("consentir");
+  }
+
+  // Encerra a sessão desta página (a conexão da IA tem sessão própria) e volta para a IA.
+  async function sairEIr(url) {
+    try { await sb.auth.signOut({ scope: "local" }); } catch (_) {}
+    location.assign(url);
+  }
+
+  async function decidir(aprovar) {
+    erro("");
+    $("autorizar").disabled = $("negar").disabled = true;
+    const fn = aprovar ? sb.auth.oauth.approveAuthorization : sb.auth.oauth.denyAuthorization;
+    const { data, error } = await fn.call(sb.auth.oauth, authId, { skipBrowserRedirect: true });
+    if (error || !data?.redirect_url) {
+      $("autorizar").disabled = $("negar").disabled = false;
+      erro("Não foi possível concluir. Tente de novo.");
+      return;
+    }
+    fim(aprovar ? "Autorizado" : "Não autorizado", "Voltando para a IA…");
+    await sairEIr(data.redirect_url);
+  }
+
+  async function iniciar() {
+    if (!sb) { fim("Sem conexão", "Não foi possível carregar a página. Verifique a internet e tente de novo."); return; }
+    if (!authId) { fim("Nada para autorizar", "Esta página abre sozinha quando você conecta o Orçamento numa IA."); return; }
+    const { data } = await sb.auth.getSession();
+    if (data.session) await detalhes(); else show("login");
+  }
+
+  $("login").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    erro("");
+    $("entrar").disabled = true;
+    const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("senha").value });
+    $("entrar").disabled = false;
+    if (error) { erro("E-mail ou senha incorretos."); return; }
+    $("senha").value = "";
+    await detalhes();
+  });
+  $("autorizar").addEventListener("click", () => decidir(true));
+  $("negar").addEventListener("click", () => decidir(false));
+  iniciar();
+</script>
+</body>
+</html>
